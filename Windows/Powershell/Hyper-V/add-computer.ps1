@@ -1,0 +1,1 @@
+Add-Computer -Domain "hywd.ipzo.net" -NewName "VHYGWBSql02" -Credential hywd\admin.kyle -Restart
