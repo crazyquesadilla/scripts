@@ -1,6 +1,6 @@
 ﻿# CreateVM.ps1           #
 # 
-#  syntax: .\CreateVM –NMName DB01 –VMFolder d:\VMs –OSDisk d:\VHD\WIN2012.vhdx –Memory 4096 –CPU 2
+#  syntax: .\CreateVM –NMName DB01 –VMFolder d:\VMs –OSDisk d:\VHD\WIN2012.vhdx –Memory 4096 –CPU 2 -Switch VM-Team
 Param
 (
     [Parameter(Mandatory=$false,Position=0)]
@@ -8,7 +8,8 @@ Param
     [string]$VMFolder, # D:\VMs
     [string]$OSDisk,   # D:\VHD\WS2012a.vhdx
     [string]$Memory,   # amount of memory in mb
-    [string]$CPU       # number of CPUs to allocate
+    [string]$CPU,       # number of CPUs to allocate
+    [string]$Switch    # name of virtual switch
 )
 
 $host.UI.RawUI.BackgroundColor = "Black"; Clear-Host
@@ -46,7 +47,7 @@ If (Get-Module Hyper-V) {
 
         $InstallerServiceAccount = "Administrator"   
         $InstallerServiceAccountUsername = "Administrator"       
-        $AdministratorPassword = "Password!"
+        $AdministratorPassword = "Server2016"
 
         $VMsFolder = $VMFolder
         $VMHost = "localhost"
@@ -105,7 +106,7 @@ If (Get-Module Hyper-V) {
          {
              # Create the VM
              Write-Host "    Creating VM: $VMName"
-             New-VM -Name $VMName -ComputerName $VMHost -Path $VMsFolder -NoVHD | Out-Null
+             New-VM -Name $VMName -ComputerName $VMHost -Path $VMsFolder -NoVHD -Generation 2 | Out-Null
 
              # Set processors
              Write-Host "    Setting processors to $CPU"
@@ -117,15 +118,22 @@ If (Get-Module Hyper-V) {
              $VMmemory = $VMmemory * 1024 * 1024
              Set-VMMemory -VMName $VMName -ComputerName $VMHost -DynamicMemoryEnabled $false -StartupBytes $VMmemory
 
+             # Set virtual switch
+             Connect-VMNetworkAdapter -VMName $VMName –Switch $Switch
+
+
              # Set OS disk
              Convert-VHD -Path $OSDisk -DestinationPath "$VHDFolder\$VMName.$OSVHDFormat"
              
-             Write-Host "    Attaching disk $VHDFolder\$VMName.$OSVHDFormat to IDE 0:0"
-             Add-VMHardDiskDrive -VMName $VMName -ComputerName $VMHost -ControllerType IDE -ControllerNumber 0 -ControllerLocation 0 -Path "$VHDFolder\$VMName.$OSVHDFormat"
+             Write-Host "    Attaching disk $VHDFolder\$VMName.$OSVHDFormat to SCSI 0:0"
+             Add-VMHardDiskDrive -VMName $VMName -ComputerName $VMHost -ControllerType SCSI -ControllerNumber 0 -ControllerLocation 0 -Path "$VHDFolder\$VMName.$OSVHDFormat"
+
+             # Set boot order
+
+             $bootdisk = Get-VMHardDiskDrive -VMName $VMName
+             Set-VMFirmware -VMName $VMName -FirstBootDevice $bootdisk
 
              # Set pagefile disk
-
-             # Set DVD
 
              # Set data disks
  
