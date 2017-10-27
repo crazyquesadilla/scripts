@@ -5,17 +5,20 @@ Param
 (
     [Parameter(Mandatory=$false,Position=0)]
     [string]$VMName,
-    [string]$VMFolder, # D:\VMs
-    [string]$OSDisk,   # D:\VHD\WS2012a.vhdx
-    [string]$Memory,   # amount of memory in mb
-    [string]$CPU,       # number of CPUs to allocate
-    [string]$Switch,    # name of virtual switch
+    [string]$VMFolder = "D:\Hyper-V\Virtual Machines\", # D:\VMs
+    [switch]$Child,
+    [string]$OSDisk = "D:\Hyper-V\Templates\2016.VHDX" ,   # D:\VHD\WS2012a.vhdx
+    [string]$Memory = 4096,   # amount of memory in mb
+    [string]$CPU = 2,       # number of CPUs to allocate
+    [string]$Switch = "VM-Team",    # name of virtual switch
     [string]$VLAN,    # VLAD Identifier
     [string]$IP,    # IP Address with mask (10.0.0.0/24)
     [string]$GW,    # IP Address of gateway (10.0.0.1)
     [string]$DNSDomain,    # name of DNS Domain
     [string]$DNS1,     # Primary DNS Server 
     [string]$DNS2     # Secondary DNS Server
+
+
 )
 
 $host.UI.RawUI.BackgroundColor = "Black"; Clear-Host
@@ -33,8 +36,6 @@ if (($CurrentUser.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrato
 
 $Host.UI.RawUI.BackgroundColor = "Black"; Clear-Host
 $Validate = $true
-
-
 
 Write-Host "Importing Hyper-V module"
 If (!(Get-Module Hyper-V)) {Import-Module Hyper-V}
@@ -103,8 +104,7 @@ If (Get-Module Hyper-V) {
          }
 
          # Creation of the VM
-         If ($CreateVM) 
-         {
+         If ($CreateVM){
              # Create the VM
              Write-Host "    Creating VM: $VMName"
              New-VM -Name $VMName -ComputerName $VMHost -Path $VMsFolder -NoVHD -Generation 2 | Out-Null
@@ -122,14 +122,18 @@ If (Get-Module Hyper-V) {
              # Set virtual switch
              Connect-VMNetworkAdapter -VMName $VMName –Switch $Switch
 
-                          If ($VLAN -ne $null)
-             {
-             Set-VMNetworkAdapterVlan -VMName $VMName -Access -VlanId $vlan
-            }
+             If ($VLAN -ne $null){
+                Set-VMNetworkAdapterVlan -VMName $VMName -Access -VlanId $vlan
+             }
 
              # Set OS disk
-             Convert-VHD -Path $OSDisk -DestinationPath "$VHDFolder\$VMName.$OSVHDFormat" | Out-Null
-             
+             if($Child){
+                New-VHD -ComputerName $VMHost -Path "$VHDFolder\$VMName.$OSVHDFormat" -ParentPath $OSDisk | Out-Null
+             }
+             else{
+                Convert-VHD -Path $OSDisk -DestinationPath "$VHDFolder\$VMName.$OSVHDFormat" | Out-Null
+             }
+                          
              Write-Host "    Attaching disk $VHDFolder\$VMName.$OSVHDFormat to SCSI 0:0"
              Add-VMHardDiskDrive -VMName $VMName -ComputerName $VMHost -ControllerType SCSI -ControllerNumber 0 -ControllerLocation 0 -Path "$VHDFolder\$VMName.$OSVHDFormat"
 
@@ -144,102 +148,18 @@ If (Get-Module Hyper-V) {
  
              # Mount OS disk to insert unattend files
              $Drive = $null
-             While ($Drive -eq $null) 
-             {
+             While ($Drive -eq $null){
                  Write-Host "    Mounting $VHDFolder\$VMName.$OSVHDFormat"
                  $Drive = Mount-VHD -Path "$VHDFolderUNC\$VMName.$OSVHDFormat" -PassThru | Get-Disk | Get-Partition | Get-Volume | Where-Object {$_.FileSystemLabel -ne ‘System Reserved’} | select -ExpandProperty DriveLetter
 
-                 If ($Drive -ne $null) 
-                 {
-
+                 If ($Drive -ne $null){
                      Write-Host "      $VHDFolder\$VMName.$OSVHDFormat mounted as $Drive`:"
-
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend">
-    <settings pass="specialize">
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <ComputerName>$VMName</ComputerName>
-            <RegisteredOrganization></RegisteredOrganization>
-            <RegisteredOwner></RegisteredOwner>
-        </component>
-"@ | Out-File "$Drive`:\unattend.xml" -Encoding ASCII
+                     $ExecutionContext.InvokeCommand.ExpandString($(Get-Content .\unattend.xml)) | Out-File "$Drive`:\unattend.xml" -Encoding ASCII
                  }
 
-
-@"
-        <component name="Networking-MPSSVC-Svc" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <DomainProfile_EnableFirewall>false</DomainProfile_EnableFirewall>
-            <PrivateProfile_EnableFirewall>false</PrivateProfile_EnableFirewall>
-            <PublicProfile_EnableFirewall>false</PublicProfile_EnableFirewall>
-        </component>
- <component name="Microsoft-Windows-TCPIP" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-                    <Interfaces>
-                <Interface wcm:action="add">
-                    <Ipv4Settings>
-                        <DhcpEnabled>false</DhcpEnabled>
-                    </Ipv4Settings>
-                    <Identifier>Ethernet</Identifier>
-                    <UnicastIpAddresses>
-                        <IpAddress wcm:action="add" wcm:keyValue="1">$IP</IpAddress>
-                    </UnicastIpAddresses>
-                    <Routes>
-                        <Route wcm:action="add">
-                            <Identifier>0</Identifier>
-                            <Prefix>0.0.0.0/0</Prefix>
-                            <Metric>20</Metric>
-                            <NextHopAddress>$GW</NextHopAddress>
-                        </Route>
-                    </Routes>
-                </Interface>
-            </Interfaces>
-            </component>
-                <component name="Microsoft-Windows-DNS-Client" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <DNSDomain>$DNSDomain</DNSDomain>
-      <Interfaces>
-          <Interface wcm:action="add">
-            <Identifier>Ethernet</Identifier>
-            <DNSServerSearchOrder>
-              <IpAddress wcm:action="add" wcm:keyValue="1">$DNS1</IpAddress>
-              <IpAddress wcm:action="add" wcm:keyValue="2">$DNS2</IpAddress>
-              </DNSServerSearchOrder>
-          </Interface>
-          </Interfaces>
-          </component>
-        <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <fDenyTSConnections>false</fDenyTSConnections>
-        </component>
-        <component name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <UserAuthentication>0</UserAuthentication>
-        </component>
-    </settings>
-    <settings pass="oobeSystem">
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <UserAccounts>
-                <AdministratorPassword>
-                    <Value>$AdministratorPassword</Value>
-                    <PlainText>true</PlainText>
-                </AdministratorPassword>
-            </UserAccounts>
-            <RegisteredOrganization></RegisteredOrganization>
-            <RegisteredOwner></RegisteredOwner>
-            <OOBE>
-                <HideEULAPage>true</HideEULAPage>
-                <SkipMachineOOBE>true</SkipMachineOOBE>
-            </OOBE>
-        </component>
-    </settings>
-</unattend>
-"@ | Out-File "$Drive`:\unattend.xml" -Append -Encoding ASCII
                  Write-Host "      Inserting SetupComplete.cmd"
                  If (!(Test-Path "$Drive`:\Windows\Setup\Scripts")) {New-Item -Path "$Drive`:\Windows\Setup\Scripts" -ItemType Directory | Out-Null}
-@"
-@echo off
-if exist %SystemDrive%\unattend.xml del %SystemDrive%\unattend.xml
-reg add HKLM\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell /v ExecutionPolicy /t REG_SZ /d "Unrestricted" /f
-powershell.exe -command "iwr https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1 -UseBasicParsing | iex"
-"@ | Out-File "$Drive`:\Windows\Setup\Scripts\SetupComplete.cmd" -Encoding ASCII
-
+                 $ExecutionContext.InvokeCommand.ExpandString($(Get-Content .\SetupComplete.cmd)) | Out-File "$Drive`:\Windows\Setup\Scripts\SetupComplete.cmd" -Encoding ASCII
                  Write-Host "      Inserting SetupComplete.ps1"
 
              }
