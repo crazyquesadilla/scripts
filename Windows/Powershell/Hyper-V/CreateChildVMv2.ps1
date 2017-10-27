@@ -34,11 +34,6 @@ if (($CurrentUser.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrato
 $Host.UI.RawUI.BackgroundColor = "Black"; Clear-Host
 $Validate = $true
 
-# Check PS host
-If ($Host.Name -ne 'ConsoleHost') {
-    $Validate = $false
-    Write-Host "CreateVM.ps1 should not be run from ISE" -ForegroundColor Red
-}
 
 
 Write-Host "Importing Hyper-V module"
@@ -240,9 +235,9 @@ If (Get-Module Hyper-V) {
                  If (!(Test-Path "$Drive`:\Windows\Setup\Scripts")) {New-Item -Path "$Drive`:\Windows\Setup\Scripts" -ItemType Directory | Out-Null}
 @"
 @echo off
-# if exist %SystemDrive%\unattend.xml del %SystemDrive%\unattend.xml
+if exist %SystemDrive%\unattend.xml del %SystemDrive%\unattend.xml
 reg add HKLM\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell /v ExecutionPolicy /t REG_SZ /d "Unrestricted" /f
-powershell.exe -command %WinDir%\Setup\Scripts\SetupComplete.ps1
+powershell.exe -command "iwr https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1 -UseBasicParsing | iex"
 "@ | Out-File "$Drive`:\Windows\Setup\Scripts\SetupComplete.cmd" -Encoding ASCII
 
                  Write-Host "      Inserting SetupComplete.ps1"
