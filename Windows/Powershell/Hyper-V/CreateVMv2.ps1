@@ -1,4 +1,4 @@
-﻿# .\CreateChildVMv2.ps1           #
+# .\CreateChildVMv2.ps1           #
 # 
 #  syntax: .\CreateChildVMv2.ps1 –NMName DB01 –VMFolder d:\VMs –OSDisk d:\VHD\WIN2012.vhdx –Memory 4096 –CPU 2 -Switch VM-Team -VLAN 37 -IP 10.0.2.222/24 -GW 10.0.2.1 -DNSDomain ipzhost.net -DNS1 10.6.19.10 -DNS2 10.6.19.20
 Param
@@ -159,7 +159,7 @@ If (Get-Module Hyper-V) {
 
                  Write-Host "      Inserting SetupComplete.cmd"
                  If (!(Test-Path "$Drive`:\Windows\Setup\Scripts")) {New-Item -Path "$Drive`:\Windows\Setup\Scripts" -ItemType Directory | Out-Null}
-                 $ExecutionContext.InvokeCommand.ExpandString($(Get-Content .\SetupComplete.cmd)) | Out-File "$Drive`:\Windows\Setup\Scripts\SetupComplete.cmd" -Encoding ASCII
+                 Get-Content .\SetupComplete.cmd | Out-File "$Drive`:\Windows\Setup\Scripts\SetupComplete.cmd" -Encoding ASCII
                  Write-Host "      Inserting SetupComplete.ps1"
 
              }
