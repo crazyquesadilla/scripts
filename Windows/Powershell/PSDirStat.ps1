@@ -14,7 +14,8 @@ try{
     }
     $children = get-childitem $("$driveletter`:\") -Depth 1 -ErrorAction Continue
 
-    $children | Select-Object -property fullname,@{name="foldersize";expr={Get-FolderSize $_.fullname}} | Sort-Object foldersize -descending | Select-Object -first 10
+    $results = $children | Select-Object -property fullname,@{name="foldersize";expr={Get-FolderSize $_.fullname}} | Sort-Object foldersize -descending | Select-Object -first 10
+    write-output $results
     exit 0
 }
 catch {Write-Output "Script failed:`n",$_.Exception.Message; exit 1001}
